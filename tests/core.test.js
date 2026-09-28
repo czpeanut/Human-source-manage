@@ -109,3 +109,28 @@ test('layoutLanes splits overlapping items', () => {
   ]);
   assert.deepStrictEqual(items.map((i) => [i.lane, i.lanes]), [[0, 2], [1, 2], [0, 1], [0, 1]]);
 });
+
+test('buildBranchView only contains that branch', () => {
+  const d = baseData();
+  d.branches.push({ id: 'b2', name: '台北' });
+  d.teachers[0].note = '0912-000-000';
+  d.classes.push({ id: 'tp', branchId: 'b2', subject: '英文', label: '', anchorGrade: 6, anchorYear: 115, startYear: 115, endYear: null });
+  d.sessions.push({ id: 's9', termId: 't115b', classId: 'tp', teacherId: 'tB', day: 1, start: 600, end: 700 });
+  const v = C.buildBranchView(d, 'b1');
+  assert.strictEqual(v.branch.name, '明道');
+  assert.ok(v.classes.every((c) => c.branchId === 'b1'));
+  assert.deepStrictEqual(v.sessions.map((s) => s.id).sort(), ['s1', 's2']);
+  assert.deepStrictEqual(v.teachers.map((t) => t.id), ['tA']);
+  assert.strictEqual(v.teachers[0].note, undefined);
+  assert.strictEqual(v.blocks, undefined);
+  assert.strictEqual(C.buildBranchView(d, 'nope'), null);
+});
+
+test('defaultTerm picks the term for today', () => {
+  const terms = [{ id: 'a', year: 115, sem: '上' }, { id: 'b', year: 115, sem: '下' }, { id: 'c', year: 116, sem: '上' }];
+  assert.strictEqual(C.defaultTerm(terms, new Date(2026, 9, 1)).id, 'a');
+  assert.strictEqual(C.defaultTerm(terms, new Date(2027, 2, 1)).id, 'b');
+  assert.strictEqual(C.defaultTerm(terms, new Date(2027, 0, 10)).id, 'a');
+  assert.strictEqual(C.defaultTerm(terms, new Date(2030, 0, 1)).id, 'c');
+  assert.strictEqual(C.defaultTerm(terms, new Date(2020, 0, 1)).id, 'a');
+});

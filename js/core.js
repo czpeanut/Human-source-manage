@@ -255,12 +255,48 @@
     return term;
   }
 
+  /* ---------- 分校展示資料（只含該分校，不含其他分校與講師私人資訊） ---------- */
+  function buildBranchView(data, branchId) {
+    const branch = byId(data.branches, branchId);
+    if (!branch) return null;
+    const classes = data.classes.filter((c) => c.branchId === branchId);
+    const ids = new Set(classes.map((c) => c.id));
+    const sessions = data.sessions
+      .filter((s) => ids.has(s.classId))
+      .map((s) => ({ id: s.id, termId: s.termId, classId: s.classId, teacherId: s.teacherId, day: s.day, start: s.start, end: s.end, note: s.note || '' }));
+    const tids = new Set(sessions.map((s) => s.teacherId).filter(Boolean));
+    return {
+      version: 1,
+      settings: Object.assign({}, data.settings),
+      branch: { id: branch.id, name: branch.name, color: branch.color },
+      branches: [{ id: branch.id, name: branch.name, color: branch.color }],
+      teachers: data.teachers.filter((t) => tids.has(t.id)).map((t) => ({ id: t.id, name: t.name, color: t.color })),
+      classes: classes.map((c) => ({ id: c.id, branchId: c.branchId, subject: c.subject, label: c.label, anchorGrade: c.anchorGrade, anchorYear: c.anchorYear, startYear: c.startYear, endYear: c.endYear })),
+      terms: data.terms.map((t) => ({ id: t.id, year: t.year, sem: t.sem })),
+      sessions,
+    };
+  }
+
+  /** 依日期推算目前學期（8 月起為上學期，2–7 月為下學期），找不到就用最接近的學期 */
+  function defaultTerm(terms, date) {
+    if (!terms.length) return null;
+    const d = date || new Date();
+    const roc = d.getFullYear() - 1911;
+    const m = d.getMonth() + 1;
+    const now = m >= 8 ? { year: roc, sem: '上' } : { year: roc - 1, sem: m >= 2 ? '下' : '上' };
+    const sorted = sortTerms(terms);
+    const exact = sorted.find((t) => t.year === now.year && t.sem === now.sem);
+    if (exact) return exact;
+    const past = sorted.filter((t) => termKey(t) <= termKey(now));
+    return past.length ? past[past.length - 1] : sorted[0];
+  }
+
   const api = {
     GRADES, STAGES, DAYS, DAYS_SHORT, SLOT, PALETTE,
     uid, fmtTime, parseTime, timeOptions, overlaps, hours,
     termKey, termName, nextTerm, sortTerms,
     stageOf, gradeAt, gradeName, classStatus, isActive, className, shortClassName,
-    byId, termSessions, findConflicts, layoutLanes, planNewTerm, applyNewTerm,
+    byId, termSessions, findConflicts, layoutLanes, planNewTerm, applyNewTerm, buildBranchView, defaultTerm,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Core = api;

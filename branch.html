@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>分校課表</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="branch-page">
+  <header class="topbar">
+    <div class="brand" id="brand">分校課表</div>
+    <div class="term" id="term-box" hidden>
+      <label for="term-select">學期</label>
+      <select id="term-select"></select>
+    </div>
+    <div class="account" id="account"></div>
+  </header>
+  <div id="banner"></div>
+  <main id="main"><div class="loading">載入中…</div></main>
+  <div id="toast" class="toast" role="status"></div>
+
+  <script src="js/config.js"></script>
+  <script src="js/cloud.js"></script>
+  <script src="js/core.js"></script>
+  <script src="js/grid.js"></script>
+  <script src="js/branch.js"></script>
+</body>
+</html>

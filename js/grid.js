@@ -8,7 +8,12 @@
    * opts: {
    *   dayStart, dayEnd,                          // 分鐘
    *   items: [{ id, kind, day, start, end, title, sub, meta, color, cls }],
-   *   onSelect(day, start, end),                 // 拖曳選取空白時段
+   *   onSelect(day, start, end),                 if (!opts.onSelect) {
+      container.querySelector('.tt').classList.add('readonly');
+      return;
+    }
+
+    // 拖曳選取空白時段
    *   onItem(kind, id),                          // 點擊課程
    * }
    */
@@ -67,6 +72,11 @@
         opts.onItem && opts.onItem(el.dataset.kind, el.dataset.id);
       });
     });
+
+    if (!opts.onSelect) {
+      container.querySelector('.tt').classList.add('readonly');
+      return;
+    }
 
     // 拖曳選取空白時段
     let sel = null;

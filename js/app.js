@@ -3,6 +3,7 @@
   'use strict';
   const C = window.Core;
   const S = window.Store;
+  const Sync = window.Sync;
   const esc = window.Grid.esc;
   const $ = (sel, el) => (el || document).querySelector(sel);
   const $$ = (sel, el) => Array.from((el || document).querySelectorAll(sel));
@@ -361,6 +362,8 @@
           d.classes = d.classes.filter((c) => c.branchId !== b.id);
           d.branches = d.branches.filter((x) => x.id !== b.id);
           S.save();
+          cloud.removeLogin(b.id).catch(() => {});
+          cloud.deleteView(b.id).catch(() => {});
         },
       });
     }
@@ -636,7 +639,7 @@
       (unassigned ? '<span class="chip warn">' + unassigned + ' 堂未指派講師</span>' : '') +
       teachersHere.map((t) => '<span class="chip" style="--c:' + esc(t.color) + '"><span class="dot"></span>' + esc(t.name) + '</span>').join('') +
       '</div></div>' +
-      '<div class="actions"><button class="btn" data-new-class>＋ 新增班級</button><button class="btn" data-edit-branch="' + b.id + '">編輯分校</button><button class="btn" data-print>列印</button></div></div>' +
+      '<div class="actions"><button class="btn" data-new-class>＋ 新增班級</button><button class="btn" data-branch-login="' + b.id + '">分校展示帳號</button><button class="btn" data-edit-branch="' + b.id + '">編輯分校</button><button class="btn" data-print>列印</button></div></div>' +
       '<p class="hint">分校課表與講師課表連動：在這裡排課並指定講師，講師課表會同步出現；顏色代表講師。</p>' +
       '<div id="grid"></div>' +
       '<h3 class="section-title">班級與授課講師</h3>' +
@@ -746,8 +749,13 @@
       '<div class="card"><div class="card-head"><h3>課表顯示時間</h3></div>' +
       '<div class="grid2"><label>最早<select data-day-start>' + opts(d.settings.dayStart) + '</select></label><label>最晚<select data-day-end>' + opts(d.settings.dayEnd) + '</select></label></div>' +
       '<p class="help">每格 30 分鐘。只影響顯示範圍。</p></div>' +
+      '<div class="card wide"><div class="card-head"><h3>分校展示帳號</h3></div>' +
+      '<p class="help">為每個分校設定帳號與密碼，分校用專屬連結登入後<b>只能看到自己分校的課表</b>（唯讀）。課表修改後會自動更新。</p>' +
+      '<div data-logins><p class="muted">載入中…</p></div></div>' +
       '<div class="card"><div class="card-head"><h3>資料備份</h3></div>' +
-      '<p class="help">資料儲存在這台電腦的瀏覽器中。建議定期匯出備份，也可以用匯出檔在其他電腦匯入。</p>' +
+      (cloud && cloud.mode === 'firebase'
+        ? '<p class="help">資料儲存在雲端（Firebase），所有管理員即時同步。仍建議定期匯出備份。</p>'
+        : '<p class="help warn">目前為本機模式：資料只存在這台電腦的瀏覽器。請依 README 設定 Firebase 以啟用雲端儲存。</p>') +
       '<div class="btn-row"><button class="btn primary" data-export>匯出備份 (JSON)</button><button class="btn" data-import>匯入備份</button><input type="file" accept=".json,application/json" data-import-file hidden></div>' +
       '<div class="btn-row"><button class="btn" data-sample>載入範例資料</button><button class="btn danger" data-clear>清空所有資料</button></div></div>' +
       '</div></section>';
@@ -797,9 +805,111 @@
         toast('匯入完成');
       });
     };
+    renderLoginsCard($('[data-logins]', main));
     $('[data-sample]', main).onclick = () => { if (confirm('載入範例資料將覆蓋目前所有資料，確定嗎？')) { S.reset(true); ui().termId = null; render(); } };
     $('[data-clear]', main).onclick = () => { if (confirm('確定清空所有資料？此動作無法復原（建議先匯出備份）。')) { S.reset(false); ensureTerm(); ui().termId = null; render(); } };
     bindSide(main);
+  }
+
+  /* ================= 分校展示帳號 ================= */
+  async function renderLoginsCard(el) {
+    if (!el) return;
+    const d = D();
+    let logins;
+    try {
+      logins = await cloud.listLogins();
+    } catch (e) {
+      el.innerHTML = '<p class="warn">無法讀取分校帳號：' + esc(e.message) + '</p>';
+      return;
+    }
+    if (!document.body.contains(el)) return;
+    el.innerHTML = '<div class="table-wrap"><table class="table"><thead><tr><th>分校</th><th>帳號</th><th>密碼</th><th>專屬連結</th><th></th></tr></thead><tbody>' +
+      d.branches.map((b) => {
+        const l = logins[b.id];
+        return '<tr><td><span class="dot" style="--c:' + esc(b.color) + '"></span> ' + esc(b.name) + '</td>' +
+          (l
+            ? '<td><code>' + esc(l.code) + '</code></td><td><code class="secret" tabindex="0" title="點一下顯示">' + esc(l.password) + '</code></td>' +
+              '<td><button class="btn sm" data-copy="' + esc(branchPageUrl('b=' + l.code)) + '">複製連結</button></td>'
+            : '<td colspan="3" class="muted">尚未設定</td>') +
+          '<td class="right nowrap"><a class="btn sm" target="_blank" rel="noopener" href="' + esc(branchPageUrl('preview=' + b.id)) + '">預覽</a> ' +
+          '<button class="btn sm" data-branch-login="' + b.id + '">' + (l ? '修改' : '設定') + '</button></td></tr>';
+      }).join('') +
+      (d.branches.length ? '' : '<tr><td colspan="5" class="empty">尚無分校</td></tr>') +
+      '</tbody></table></div>';
+    $$('[data-branch-login]', el).forEach((b) => (b.onclick = () => openLoginModal(b.dataset.branchLogin)));
+    $$('.secret', el).forEach((x) => (x.onclick = () => x.classList.toggle('show')));
+    $$('[data-copy]', el).forEach((b) => (b.onclick = () => copyText(b.dataset.copy)));
+  }
+
+  function copyText(text) {
+    const done = () => toast('已複製連結');
+    if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(done, () => prompt('請複製以下連結', text));
+    else prompt('請複製以下連結', text);
+  }
+
+  function randomPassword() {
+    const chars = 'abcdefghjkmnpqrstuvwxyz23456789';
+    const arr = new Uint32Array(8);
+    crypto.getRandomValues(arr);
+    return Array.from(arr, (n) => chars[n % chars.length]).join('');
+  }
+
+  async function openLoginModal(branchId) {
+    const d = D();
+    const b = C.byId(d.branches, branchId);
+    if (!b) return;
+    let logins = {};
+    try { logins = await cloud.listLogins(); } catch (e) { alert('無法讀取分校帳號：' + e.message); return; }
+    const cur = logins[branchId];
+    const actions = [];
+    if (cur) {
+      actions.push({
+        label: '停用帳號', cls: 'danger left', onClick: () => {
+          if (!confirm('停用「' + b.name + '」的展示帳號？分校將無法再登入。')) return false;
+          cloud.removeLogin(branchId).then(() => { toast('已停用'); render(); }, (e) => alert(e.message));
+        },
+      });
+    }
+    actions.push({ label: '取消' });
+    actions.push({
+      label: '儲存', cls: 'primary', onClick: (form) => {
+        const v = formValues(form);
+        const code = v.code.trim().toLowerCase();
+        const pw = v.password.trim();
+        if (!cloud.codeRe.test(code)) { alert('帳號只能使用小寫英文、數字與 -（2–30 字）'); return false; }
+        if (pw.length < 6) { alert('密碼至少 6 個字'); return false; }
+        const dup = Object.entries(logins).find(([id, l]) => id !== branchId && l.code === code);
+        if (dup) { alert('此帳號已被其他分校使用'); return false; }
+        const btn = $('#modal .primary');
+        btn.disabled = true;
+        btn.textContent = '儲存中…';
+        cloud.setLogin(branchId, code, pw)
+          .then(() => (cloud.mode === 'firebase' ? Sync.publishBranch(branchId) : null))
+          .then(() => {
+            $('#modal').classList.remove('open');
+            $('#modal').innerHTML = '';
+            toast('已設定「' + b.name + '」展示帳號');
+            render();
+          }, (e) => {
+            btn.disabled = false;
+            btn.textContent = '儲存';
+            alert('設定失敗：' + (e.message || e));
+          });
+        return false;
+      },
+    });
+    modal({
+      title: b.name + ' · 分校展示帳號',
+      html:
+        '<p class="help">分校人員用這組帳號密碼登入後，只能看到「' + esc(b.name) + '」的課表。</p>' +
+        '<label>帳號（小寫英文、數字）<input name="code" value="' + esc(cur ? cur.code : '') + '" placeholder="例：mingdao" autocapitalize="off" spellcheck="false"></label>' +
+        '<label>密碼（至少 6 字）<span class="input-row"><input name="password" value="' + esc(cur ? cur.password : randomPassword()) + '" autocomplete="off" spellcheck="false"><button type="button" class="btn" data-gen>重新產生</button></span></label>' +
+        '<p class="help">儲存後，把「專屬連結」和密碼交給分校即可。修改密碼後，舊密碼立即失效。</p>',
+      actions,
+      onMount(form) {
+        $('[data-gen]', form).onclick = () => { form.password.value = randomPassword(); };
+      },
+    });
   }
 
   /* ================= 共用事件 ================= */
@@ -813,6 +923,7 @@
     $$('[data-edit-class]', main).forEach((b) => (b.onclick = () => openClassModal(b.dataset.editClass)));
     $$('[data-new-term]', main).forEach((b) => (b.onclick = openNewTermModal));
     $$('[data-print]', main).forEach((b) => (b.onclick = () => window.print()));
+    $$('[data-branch-login]', main).forEach((b) => (b.onclick = () => openLoginModal(b.dataset.branchLogin)));
   }
 
   /* ================= 主畫面 ================= */
@@ -839,13 +950,127 @@
     window.scrollTo(0, scroll);
   }
 
-  function init() {
-    S.load();
-    S.onChange(render);
+  let cloud = null;
+
+  function showLogin(message) {
+    document.body.classList.add('logged-out');
+    $('#main').innerHTML =
+      '<div class="login-wrap"><form class="login-card" novalidate>' +
+      '<h2>講師人力管理</h2><p class="muted">管理員登入</p>' +
+      '<label>Email<input name="email" type="email" autocomplete="username" required></label>' +
+      '<label>密碼<input name="password" type="password" autocomplete="current-password" required></label>' +
+      '<p class="login-error" role="alert">' + esc(message || '') + '</p>' +
+      '<button class="btn primary block" type="submit">登入</button>' +
+      '<p class="help center">分校人員請使用 <a href="' + branchPageUrl() + '">分校課表頁面</a> 登入</p>' +
+      '</form></div>';
+    const form = $('.login-card');
+    form.email.focus();
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const btn = $('button[type=submit]', form);
+      btn.disabled = true;
+      btn.textContent = '登入中…';
+      try {
+        await cloud.signIn(form.email.value, form.password.value);
+        afterLogin();
+      } catch (err) {
+        btn.disabled = false;
+        btn.textContent = '登入';
+        $('.login-error', form).textContent = authMessage(err);
+      }
+    };
+  }
+
+  function authMessage(e) {
+    const code = (e && e.code) || '';
+    if (/invalid-credential|wrong-password|user-not-found|invalid-email|invalid-login/.test(code)) return '帳號或密碼錯誤';
+    if (/too-many-requests/.test(code)) return '嘗試次數過多，請稍後再試';
+    if (/network/.test(code)) return '無法連線，請檢查網路';
+    return (e && e.message) || '登入失敗';
+  }
+
+  function branchPageUrl(query) {
+    const p = new URLSearchParams(location.search);
+    const q = new URLSearchParams(query || '');
+    if (p.get('emulator')) q.set('emulator', p.get('emulator'));
+    const qs = q.toString();
+    return new URL('branch.html' + (qs ? '?' + qs : ''), location.href).href;
+  }
+
+  async function afterLogin() {
+    $('#main').innerHTML = '<div class="loading">載入雲端資料中…</div>';
+    const user = cloud.user();
+    Sync.onStatus = renderSyncStatus;
+    Sync.start(cloud, () => {
+      document.body.classList.remove('logged-out');
+      renderAccount(user);
+      render();
+    }, async () => {
+      const bid = await cloud.myBranchId();
+      if (bid) { location.href = branchPageUrl(); return; }
+      await cloud.signOut();
+      showLogin('此帳號沒有管理權限（請確認已加入 firestore.rules 的管理員名單）');
+    });
+  }
+
+  function renderAccount(user) {
+    const el = $('#account');
+    if (cloud.mode === 'local') {
+      el.innerHTML = '<span class="sync-chip warn" title="資料只存在這台電腦的瀏覽器。請在 js/config.js 設定 Firebase 以使用雲端儲存。">本機模式</span>';
+      return;
+    }
+    el.innerHTML = '<span class="sync-chip" id="sync"></span><span class="user" title="' + esc(user.email) + '">' + esc(user.email) + '</span><button class="btn sm" id="logout">登出</button>';
+    $('#logout').onclick = async () => {
+      if (Sync.seq !== Sync.savedSeq && !confirm('還有修改尚未儲存完成，確定登出？')) return;
+      await cloud.signOut();
+      location.reload();
+    };
+    renderSyncStatus(Sync.status, Sync.error);
+  }
+
+  function renderSyncStatus(status, error) {
+    const el = $('#sync');
+    if (!el) return;
+    const map = {
+      saved: ['☁ 已同步', ''],
+      saving: ['儲存中…', 'busy'],
+      large: ['☁ 已同步（資料量接近上限）', 'warn'],
+      error: ['⚠ 儲存失敗，重試中', 'error'],
+      idle: ['', ''],
+    };
+    const [txt, cls] = map[status] || map.idle;
+    el.textContent = txt;
+    el.className = 'sync-chip ' + cls;
+    el.title = error || '';
+  }
+
+  window.addEventListener('beforeunload', (e) => {
+    if (cloud && cloud.mode === 'firebase' && Sync.seq !== Sync.savedSeq) { e.preventDefault(); e.returnValue = ''; }
+  });
+  window.addEventListener('hsm-remote-update', (e) => toast(e.detail + ' 更新了資料'));
+
+  async function init() {
     $('#term-select').onchange = (e) => { ui().termId = e.target.value; S.saveUI(); render(); };
     $('#new-term').onclick = openNewTermModal;
     $$('#nav [data-view]').forEach((b) => (b.onclick = () => { ui().view = b.dataset.view; S.saveUI(); render(); }));
-    render();
+    S.onChange(() => { if (!document.body.classList.contains('logged-out')) render(); });
+    try {
+      cloud = await window.CloudReady;
+    } catch (e) {
+      $('#main').innerHTML = '<div class="loading error">無法載入雲端服務，請檢查網路後重新整理。<br><small>' + esc(e.message) + '</small></div>';
+      return;
+    }
+    if (cloud.mode === 'local') {
+      S.load('local');
+      renderAccount(null);
+      render();
+      return;
+    }
+    S.load('cloud');
+    document.body.classList.add('logged-out');
+    const user = await cloud.waitAuth();
+    if (user) afterLogin();
+    else showLogin();
   }
 
   document.addEventListener('DOMContentLoaded', init);

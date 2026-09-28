@@ -91,18 +91,35 @@
     data: null,
     ui: {},
     listeners: [],
-    load() {
-      let raw = null;
-      try { raw = localStorage.getItem(KEY); } catch (e) { /* 無法使用儲存空間 */ }
+    mode: 'local',      // local：存在瀏覽器；cloud：存在雲端（由 Sync 負責）
+    persistHook: null,  // 雲端模式下每次修改後呼叫
+    load(mode) {
+      this.mode = mode || 'local';
+      try { this.ui = JSON.parse(localStorage.getItem(UI_KEY) || '{}') || {}; } catch (e) { this.ui = {}; }
+      if (this.mode === 'cloud') {
+        this.data = empty();
+        return;
+      }
+      const raw = this.localRaw();
       if (raw) {
         try { this.data = normalize(JSON.parse(raw)); } catch (e) { this.data = sample(); }
       } else {
         this.data = sample();
       }
-      try { this.ui = JSON.parse(localStorage.getItem(UI_KEY) || '{}') || {}; } catch (e) { this.ui = {}; }
+    },
+    localRaw() {
+      try { return localStorage.getItem(KEY); } catch (e) { return null; }
     },
     save() {
-      try { localStorage.setItem(KEY, JSON.stringify(this.data)); } catch (e) { /* ignore */ }
+      if (this.mode === 'local') {
+        try { localStorage.setItem(KEY, JSON.stringify(this.data)); } catch (e) { /* ignore */ }
+      }
+      if (this.persistHook) this.persistHook();
+      this.listeners.forEach((fn) => fn());
+    },
+    /** 套用雲端資料（不會再回寫雲端） */
+    setFromRemote(d) {
+      this.data = normalize(d);
       this.listeners.forEach((fn) => fn());
     },
     saveUI() {
@@ -112,6 +129,7 @@
       this.data = normalize(d);
       this.save();
     },
+    normalize,
     reset(withSample) {
       this.data = withSample ? sample() : empty();
       this.save();

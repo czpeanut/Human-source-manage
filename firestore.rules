@@ -1,0 +1,49 @@
+rules_version = '2';
+
+// 講師人力管理系統 — Firestore 安全規則
+// ★ 請把下面的 Email 換成管理員的登入 Email（可以多個）。
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.token.email in [
+          'admin@example.com'
+        ];
+    }
+
+    function myBranch() {
+      return get(/databases/$(database)/documents/branchAccounts/$(request.auth.uid)).data.branchId;
+    }
+
+    // 完整資料：只有管理員能讀寫
+    match /app/{doc} {
+      allow read, write: if isAdmin();
+    }
+
+    // 分校帳號密碼：只有管理員
+    match /branchLogins/{branchId} {
+      allow read, write: if isAdmin();
+    }
+
+    // 登入帳號 → 分校：管理員寫；本人可讀自己的
+    match /branchAccounts/{uid} {
+      allow read: if isAdmin() || (request.auth != null && request.auth.uid == uid);
+      allow write: if isAdmin();
+    }
+
+    // 分校展示資料：管理員寫；分校只能讀自己的
+    match /branchViews/{branchId} {
+      allow write: if isAdmin();
+      allow read: if isAdmin()
+        || (request.auth != null
+            && exists(/databases/$(database)/documents/branchAccounts/$(request.auth.uid))
+            && myBranch() == branchId);
+    }
+
+    // 其他一律拒絕
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
