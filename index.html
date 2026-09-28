@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>講師人力管理</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">講師人力管理</div>
+    <nav id="nav" aria-label="主選單">
+      <button data-view="teacher">講師課表</button>
+      <button data-view="branch">分校課表</button>
+      <button data-view="classes">班級管理</button>
+      <button data-view="settings">設定</button>
+    </nav>
+    <div class="term">
+      <label for="term-select">學期</label>
+      <select id="term-select"></select>
+      <button id="new-term" class="btn sm" title="建立新學期 / 年級進階">＋ 新學期</button>
+    </div>
+  </header>
+  <main id="main"></main>
+  <div id="modal" class="modal"></div>
+  <div id="toast" class="toast" role="status"></div>
+
+  <script src="js/core.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/grid.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

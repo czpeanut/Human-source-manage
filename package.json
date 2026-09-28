@@ -1,0 +1,10 @@
+{
+  "name": "human-source-manage",
+  "version": "1.0.0",
+  "private": true,
+  "description": "補習班講師人力管理系統：講師課表、分校課表、半小時排課、年級進階",
+  "scripts": {
+    "start": "npx http-server -p 8080 -c-1 .",
+    "test": "node --test tests/core.test.js"
+  }
+}
